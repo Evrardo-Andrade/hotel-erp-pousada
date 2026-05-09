@@ -1,7 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { Router } from "express";
 import { z } from "zod";
@@ -9,16 +6,14 @@ import { query, withTransaction } from "../../config/database.js";
 import { authorizePermission } from "../../middleware/auth.js";
 import { auditAction } from "../../middleware/audit.js";
 import { AppError } from "../../utils/app-error.js";
+import { uploadPrivateFile, deleteStorageFile, streamFileToResponse } from "../../services/storage.js";
 
 const router = Router();
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }
 });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDirectory = path.resolve(__dirname, "../../../uploads/guests");
 
 const guestSchema = z.object({
   nome: z.string().min(3),
@@ -66,10 +61,6 @@ const guestSchema = z.object({
   documento_conferido_em: z.string().optional().or(z.literal("")),
   documento_conferido_por: z.string().optional().or(z.literal(""))
 });
-
-async function ensureUploadsDirectory() {
-  await fs.mkdir(uploadsDirectory, { recursive: true });
-}
 
 router.get("/", authorizePermission("guests.manage"), async (_request, response) => {
   const result = await query(
@@ -218,218 +209,4 @@ router.post("/", authorizePermission("guests.manage"), auditAction("create", "ho
   return response.status(201).json(result);
 });
 
-router.put("/:id", authorizePermission("guests.manage"), auditAction("update", "hospedes"), async (request, response) => {
-  const data = guestSchema.parse(request.body);
-
-  const result = await query(
-    `UPDATE hospedes SET
-      nome = $2,
-      nome_social = $3,
-      data_nascimento = $4,
-      genero = $5,
-      nacionalidade = $6,
-      profissao = $7,
-      tipo_documento = $8,
-      numero_documento = $9,
-      orgao_emissor = $10,
-      uf_emissor = $11,
-      data_emissao_documento = $12,
-      cpf = $13,
-      validade_documento = $14,
-      email = $15,
-      telefone = $16,
-      whatsapp = $17,
-      cep = $18,
-      logradouro = $19,
-      numero_endereco = $20,
-      complemento = $21,
-      bairro = $22,
-      cidade = $23,
-      uf = $24,
-      pais = $25,
-      motivo_viagem = $26,
-      meio_transporte = $27,
-      procedencia = $28,
-      destino = $29,
-      data_prevista_chegada = $30,
-      data_prevista_saida = $31,
-      observacoes_internas = $32,
-      responsavel_legal_nome = $33,
-      responsavel_legal_cpf = $34,
-      responsavel_legal_documento = $35,
-      responsavel_legal_telefone = $36,
-      responsavel_legal_parentesco = $37,
-      responsavel_legal_observacoes = $38,
-      autorizacao_anexada = $39,
-      consentimento_lgpd = $40,
-      consentimento_lgpd_em = $41,
-      finalidade_lgpd = $42,
-      documento_conferido = $43,
-      documento_conferido_em = $44,
-      documento_conferido_por = $45,
-      updated_at = NOW()
-     WHERE id = $1
-     RETURNING *`,
-    [
-      request.params.id,
-      data.nome,
-      data.nome_social || null,
-      data.data_nascimento || null,
-      data.genero || null,
-      data.nacionalidade || null,
-      data.profissao || null,
-      data.tipo_documento || null,
-      data.numero_documento || null,
-      data.orgao_emissor || null,
-      data.uf_emissor || null,
-      data.data_emissao_documento || null,
-      data.cpf || null,
-      data.validade_documento || null,
-      data.email || null,
-      data.telefone,
-      data.whatsapp || null,
-      data.cep || null,
-      data.logradouro || null,
-      data.numero_endereco || null,
-      data.complemento || null,
-      data.bairro || null,
-      data.cidade || null,
-      data.uf || null,
-      data.pais || null,
-      data.motivo_viagem || null,
-      data.meio_transporte || null,
-      data.procedencia || null,
-      data.destino || null,
-      data.data_prevista_chegada || null,
-      data.data_prevista_saida || null,
-      data.observacoes_internas || null,
-      data.responsavel_legal_nome || null,
-      data.responsavel_legal_cpf || null,
-      data.responsavel_legal_documento || null,
-      data.responsavel_legal_telefone || null,
-      data.responsavel_legal_parentesco || null,
-      data.responsavel_legal_observacoes || null,
-      data.autorizacao_anexada ?? false,
-      data.consentimento_lgpd ?? false,
-      data.consentimento_lgpd ? data.consentimento_lgpd_em || new Date().toISOString() : null,
-      data.finalidade_lgpd || null,
-      data.documento_conferido ?? false,
-      data.documento_conferido ? data.documento_conferido_em || new Date().toISOString() : null,
-      data.documento_conferido_por || null
-    ]
-  );
-
-  if (!result.rows.length) {
-    throw new AppError("Hospede nao encontrado.", 404);
-  }
-
-  return response.json(result.rows[0]);
-});
-
-router.delete("/:id", authorizePermission("guests.manage"), auditAction("delete", "hospedes"), async (request, response) => {
-  await query(`UPDATE hospedes SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`, [request.params.id]);
-  return response.status(204).send();
-});
-
-router.get("/:id/documents", authorizePermission("guests.manage"), async (request, response) => {
-  const result = await query(
-    `SELECT id, guest_id, document_type, original_filename, mime_type, file_size, description, uploaded_by, uploaded_at
-     FROM guest_documents
-     WHERE guest_id = $1 AND deleted_at IS NULL
-     ORDER BY uploaded_at DESC`,
-    [request.params.id]
-  );
-
-  return response.json(result.rows);
-});
-
-router.post("/:id/documents", authorizePermission("guests.manage"), auditAction("upload", "guest_documents"), upload.single("file"), async (request, response) => {
-  if (!request.file) {
-    throw new AppError("Selecione um arquivo para upload.", 400);
-  }
-
-  await ensureUploadsDirectory();
-
-  const extension = path.extname(request.file.originalname) || ".bin";
-  const storedFilename = `${crypto.randomUUID()}${extension}`;
-  const safePath = path.join(uploadsDirectory, storedFilename);
-
-  await fs.writeFile(safePath, request.file.buffer);
-
-  const result = await query(
-    `INSERT INTO guest_documents (
-      guest_id, document_type, original_filename, stored_filename, file_path, mime_type, file_size, description, uploaded_by, uploaded_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-     RETURNING id, guest_id, document_type, original_filename, stored_filename, mime_type, file_size, description, uploaded_by, uploaded_at`,
-    [
-      request.params.id,
-      request.body.document_type || "Outro",
-      request.file.originalname,
-      storedFilename,
-      safePath,
-      request.file.mimetype,
-      request.file.size,
-      request.body.description || null,
-      request.user?.id || "system"
-    ]
-  );
-
-  return response.status(201).json(result.rows[0]);
-});
-
-router.get("/:id/documents/:documentId/view", authorizePermission("guests.manage"), async (request, response) => {
-  const result = await query(
-    `SELECT *
-     FROM guest_documents
-     WHERE id = $1 AND guest_id = $2 AND deleted_at IS NULL`,
-    [request.params.documentId, request.params.id]
-  );
-
-  if (!result.rows.length) {
-    throw new AppError("Documento nao encontrado.", 404);
-  }
-
-  const document = result.rows[0];
-  await query(
-    `INSERT INTO guest_audit_logs (guest_id, action, document_id, user_id, details)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [request.params.id, "view_document", request.params.documentId, request.user?.id || null, JSON.stringify({ filename: document.original_filename })]
-  );
-
-  return response.sendFile(document.file_path);
-});
-
-router.get("/:id/documents/:documentId/download", authorizePermission("guests.manage"), async (request, response) => {
-  const result = await query(
-    `SELECT *
-     FROM guest_documents
-     WHERE id = $1 AND guest_id = $2 AND deleted_at IS NULL`,
-    [request.params.documentId, request.params.id]
-  );
-
-  if (!result.rows.length) {
-    throw new AppError("Documento nao encontrado.", 404);
-  }
-
-  const document = result.rows[0];
-  await query(
-    `INSERT INTO guest_audit_logs (guest_id, action, document_id, user_id, details)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [request.params.id, "download_document", request.params.documentId, request.user?.id || null, JSON.stringify({ filename: document.original_filename })]
-  );
-
-  return response.download(document.file_path, document.original_filename);
-});
-
-router.delete("/:id/documents/:documentId", authorizePermission("guests.manage"), auditAction("delete", "guest_documents"), async (request, response) => {
-  await query(
-    `UPDATE guest_documents
-     SET deleted_at = NOW()
-     WHERE id = $1 AND guest_id = $2`,
-    [request.params.documentId, request.params.id]
-  );
-
-  return response.status(204).send();
-});
-
-export { router as guestsRoutes };
+router

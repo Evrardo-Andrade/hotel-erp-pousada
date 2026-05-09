@@ -17,6 +17,7 @@ import { settingsRoutes } from "../modules/settings/settings-routes.js";
 import { fiscalRoutes } from "../modules/fiscal/fiscal-routes.js";
 import { logsRoutes } from "../modules/logs/logs-routes.js";
 import { authenticate } from "../middleware/auth.js";
+import { streamFileToResponse } from "../services/storage.js";
 
 const router = Router();
 
@@ -25,6 +26,21 @@ router.get("/health", (request, response) => {
 });
 
 router.use("/auth", authRoutes);
+
+router.get("/products/image/:storageKey(*)", async (request, response) => {
+  try {
+    const storageKey = decodeURIComponent(request.params.storageKey);
+    if (!storageKey.startsWith("public:")) {
+      return response.status(403).json({ message: "Acesso negado." });
+    }
+    await streamFileToResponse(storageKey, response);
+  } catch (err) {
+    if (!response.headersSent) {
+      response.status(500).json({ message: "Erro ao servir imagem." });
+    }
+  }
+});
+
 router.use(authenticate);
 router.use("/dashboard", dashboardRoutes);
 router.use("/rooms", roomsRoutes);
