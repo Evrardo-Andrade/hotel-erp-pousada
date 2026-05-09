@@ -109,4 +109,116 @@ router.post("/", authorizePermission("products.manage"), auditAction("create", "
 
 router.put("/:id", authorizePermission("products.manage"), auditAction("update", "produtos"), async (request, response) => {
   const data = productSchema.partial({ estoqueInicial: true }).extend({
-    nome: z.string().min(
+    nome: z.string().min(3),
+    categoria: z.string().min(2),
+    preco: z.number().nonnegative()
+  }).parse(request.body);
+
+  const currentProduct = await getProductById(request.params.id);
+
+  if (!currentProduct) {
+    throw new AppError("Produto nao encontrado.", 404);
+  }
+
+  await query(
+    `UPDATE produtos
+     SET nome = $2,
+         categoria = $3,
+         preco = $4,
+         codigo_barras = $5,
+         internal_code = $6,
+         tipo_produto = $7,
+         permite_combo = $8,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [
+      request.params.id,
+      data.nome,
+      data.categoria,
+      data.preco,
+      data.codigoBarras ?? null,
+      data.codigoInterno ?? null,
+      data.tipoProduto,
+      data.permiteCombo
+    ]
+  );
+
+  if (typeof data.estoqueInicial === "number") {
+    await query(
+      `INSERT INTO estoque (produto_id, quantidade_atual)
+       VALUES ($1, $2)
+       ON CONFLICT (produto_id)
+       DO UPDATE SET quantidade_atual = EXCLUDED.quantidade_atual, updated_at = NOW()`,
+      [request.params.id, data.estoqueInicial]
+    );
+  }
+
+  return response.json(await getProductById(request.params.id));
+});
+
+router.post(
+  "/:id/image",
+  authorizePermission("products.manage"),
+  auditAction("upload_image", "produtos"),
+  upload.single("image"),
+  async (request, response) => {
+    const currentProduct = await getProductById(request.params.id);
+
+    if (!currentProduct) {
+      throw new AppError("Produto nao encontrado.", 404);
+    }
+
+    if (!request.file) {
+      throw new AppError("Selecione uma imagem para upload.", 422);
+    }
+
+    if (currentProduct.image_storage_key) {
+      await deleteStorageFile(currentProduct.image_storage_key).catch(() => {});
+    }
+
+    const { storageKey, imageUrl } = await uploadPublicFile(
+      request.file.buffer,
+      request.file.originalname,
+      request.file.mimetype
+    );
+
+    await query(
+      `UPDATE produtos
+       SET image_storage_key = $2,
+           image_filename = $3,
+           image_url = $4,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [request.params.id, storageKey, request.file.originalname, imageUrl]
+    );
+
+    return response.json(await getProductById(request.params.id));
+  }
+);
+
+router.delete("/:id/image", authorizePermission("products.manage"), auditAction("delete_image", "produtos"), async (request, response) => {
+  const currentProduct = await getProductById(request.params.id);
+
+  if (!currentProduct) {
+    throw new AppError("Produto nao encontrado.", 404);
+  }
+
+  if (currentProduct.image_storage_key) {
+    await deleteStorageFile(currentProduct.image_storage_key).catch(() => {});
+  }
+
+  await query(
+    `UPDATE produtos
+     SET image_storage_key = NULL,
+         image_filename = NULL,
+         image_url = NULL,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [request.params.id]
+  );
+
+  return response.status(204).send();
+});
+
+export { router as productsRoutes };
+export { streamFileToResponse };
