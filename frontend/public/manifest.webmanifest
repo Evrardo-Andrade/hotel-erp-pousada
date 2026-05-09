@@ -1,0 +1,17 @@
+{
+  "name": "Hotel ERP",
+  "short_name": "Hotel ERP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3efe6",
+  "theme_color": "#123524",
+  "description": "ERP hoteleiro com PWA do hospede, PDV, reservas e room service.",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
