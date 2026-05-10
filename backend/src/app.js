@@ -16,6 +16,7 @@ applySecurity(app);
 
 const allowedOrigins = new Set([
   "http://localhost:5173",
+  "https://hotel-erp-frontend.onrender.com",
   "https://hotel-erp-pousada.onrender.com",
   env.appUrl
 ].filter(Boolean));
