@@ -1,74 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-
-const rolePermissions = {
-  admin: ["*"],
-  gerente: [
-    "dashboard.read",
-    "rooms.read",
-    "rooms.manage",
-    "reservations.read",
-    "reservations.manage",
-    "guests.read",
-    "guests.manage",
-    "stay.read",
-    "stay.manage",
-    "products.read",
-    "products.manage",
-    "pos.read",
-    "pos.manage",
-    "orders.read",
-    "orders.manage",
-    "finance.read",
-    "finance.manage",
-    "fiscal.emit",
-    "fiscal.cancel",
-    "settings.read",
-    "settings.manage",
-    "logs.read"
-  ],
-  recepcao: [
-    "dashboard.read",
-    "rooms.read",
-    "reservations.manage",
-    "guests.manage",
-    "stay.manage",
-    "pos.read",
-    "orders.read",
-    "finance.read"
-  ],
-  supervisor: [
-    "dashboard.read",
-    "products.read",
-    "pos.read",
-    "pos.manage",
-    "orders.read",
-    "orders.manage",
-    "finance.read",
-    "finance.manage",
-    "fiscal.emit",
-    "fiscal.cancel",
-    "logs.read"
-  ],
-  fiscal: [
-    "dashboard.read",
-    "finance.read",
-    "fiscal.emit",
-    "fiscal.cancel",
-    "settings.read",
-    "logs.read"
-  ],
-  caixa: [
-    "dashboard.read",
-    "products.read",
-    "pos.read",
-    "pos.manage",
-    "orders.read",
-    "orders.manage",
-    "finance.read",
-    "fiscal.emit"
-  ]
-};
+import { buildPermissions } from "../modules/auth/role-permissions.js";
 
 function hasPermission(granted, required) {
   if (granted.includes("*") || granted.includes(required)) {
@@ -84,9 +16,10 @@ function hasPermission(granted, required) {
 }
 
 export function authenticate(request, response, next) {
-  const [, token] = (request.headers.authorization || "").split(" ");
+  const authHeader = request.headers.authorization || "";
+  const [scheme, token] = authHeader.split(" ");
 
-  if (!token) {
+  if (scheme !== "Bearer" || !token) {
     return response.status(401).json({ message: "Token nao informado." });
   }
 
@@ -96,7 +29,7 @@ export function authenticate(request, response, next) {
       ...payload,
       permissions: payload.permissions?.length
         ? payload.permissions
-        : rolePermissions[payload.role] || []
+        : buildPermissions(payload.role)
     };
     return next();
   } catch (error) {
@@ -104,15 +37,20 @@ export function authenticate(request, response, next) {
   }
 }
 
-export function authorize(...roles) {
+export function requireRole(roles = []) {
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
   return (request, response, next) => {
-    if (!request.user || !roles.includes(request.user.role)) {
+    if (!request.user || !allowedRoles.includes(request.user.role)) {
       return response.status(403).json({ message: "Acesso negado." });
     }
 
     return next();
   };
 }
+
+export const authMiddleware = authenticate;
+export const authorize = (...roles) => requireRole(roles);
 
 export function authorizePermission(...permissions) {
   return (request, response, next) => {

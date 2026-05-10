@@ -7,6 +7,51 @@ const API_ORIGIN = (() => {
   }
 })();
 
+const AUTH_STORAGE_KEY = "hotel-erp-auth";
+const AUTH_STORAGE_MODE_KEY = "hotel-erp-auth-storage";
+
+function getAuthStorage(mode = null) {
+  const storageMode = mode || window.localStorage.getItem(AUTH_STORAGE_MODE_KEY) || "local";
+  return storageMode === "session" ? window.sessionStorage : window.localStorage;
+}
+
+export function getStoredAuthSession() {
+  const localValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  const sessionValue = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+  const raw = sessionValue || localValue;
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+export function setStoredAuthSession(session, remember = true) {
+  const storageMode = remember === null
+    ? window.localStorage.getItem(AUTH_STORAGE_MODE_KEY) || "local"
+    : remember
+      ? "local"
+      : "session";
+  const storage = getAuthStorage(storageMode);
+  const serialized = JSON.stringify(session);
+
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  window.localStorage.setItem(AUTH_STORAGE_MODE_KEY, storageMode);
+  storage.setItem(AUTH_STORAGE_KEY, serialized);
+}
+
+export function clearStoredAuthSession() {
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_STORAGE_MODE_KEY);
+}
+
 const fallbackStore = {
   "/dashboard": {
     roomStatus: [
@@ -806,6 +851,18 @@ const fallbackStore = {
   ]
 };
 
+const fallbackAuthUsers = [
+  {
+    id: "user-admin-1",
+    nome: "Administrador ERP",
+    email: "admin@erp.com",
+    password: "Admin@123456",
+    role: "admin",
+    ativo: true,
+    permissions: ["*"]
+  }
+];
+
 fallbackStore["/room-amenities"] = fallbackStore["/rooms/metadata"].comodidades;
 fallbackStore["/room-accommodation-types"] = fallbackStore["/rooms/metadata"].tiposAcomodacao;
 fallbackStore["/room-types"] = fallbackStore["/rooms/metadata"].tiposQuarto;
@@ -827,8 +884,9 @@ syncFallbackAmenities();
 syncFallbackRoomTypeMetadata();
 
 function getHeaders(extraHeaders = {}) {
+  const token = getStoredAuthSession()?.token || "";
   return {
-    Authorization: `Bearer ${localStorage.getItem("hotel-erp-token") || "demo-token"}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extraHeaders
   };
 }
@@ -843,6 +901,12 @@ async function parseResponse(response) {
   if (!response.ok) {
     const error = new Error(data?.message || "Falha na requisicao.");
     error.status = response.status;
+
+    if (response.status === 401) {
+      clearStoredAuthSession();
+      window.dispatchEvent(new CustomEvent("hotel-erp-auth-expired"));
+    }
+
     throw error;
   }
 
@@ -1349,6 +1413,10 @@ async function request(path, options = {}) {
     const response = await fetch(`${API_URL}${path}`, config);
     return await parseResponse(response);
   } catch (error) {
+    if (error?.status === 401 || error?.status === 403) {
+      throw error;
+    }
+
     if (
       routePath in fallbackStore ||
       routePath.startsWith("/rooms") ||
@@ -1359,6 +1427,7 @@ async function request(path, options = {}) {
       routePath.startsWith("/products") ||
       routePath.startsWith("/pos") ||
       routePath.startsWith("/settings") ||
+      routePath.startsWith("/auth") ||
       routePath.startsWith("/room-amenities") ||
       routePath.startsWith("/room-accommodation-types") ||
       routePath.startsWith("/room-types")
@@ -1374,6 +1443,110 @@ async function fallbackRequest(path, options) {
   const [routePath, queryString = ""] = path.split("?");
   const searchParams = new URLSearchParams(queryString);
   const method = (options.method || "GET").toUpperCase();
+
+  if (routePath === "/auth/login" && method === "POST") {
+    const payload = JSON.parse(options.body);
+    const user = fallbackAuthUsers.find(
+      (item) => item.email.toLowerCase() === String(payload.email || "").toLowerCase() && item.ativo
+    );
+
+    if (!user || user.password !== payload.password) {
+      const error = new Error("Credenciais invalidas.");
+      error.status = 401;
+      throw error;
+    }
+
+    return {
+      token: "mock-admin-token",
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        ativo: user.ativo,
+        permissions: user.permissions
+      }
+    };
+  }
+
+  if (routePath === "/auth/me" && method === "GET") {
+    const session = getStoredAuthSession();
+
+    if (!session?.token) {
+      const error = new Error("Token nao informado.");
+      error.status = 401;
+      throw error;
+    }
+
+    const user = fallbackAuthUsers.find((item) => item.email.toLowerCase() === String(session.user?.email || "").toLowerCase());
+
+    if (!user) {
+      const error = new Error("Usuario nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    return {
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        ativo: user.ativo,
+        permissions: user.permissions
+      }
+    };
+  }
+
+  if (routePath === "/auth/logout" && method === "POST") {
+    return null;
+  }
+
+  if (routePath === "/auth/register" && method === "POST") {
+    const payload = JSON.parse(options.body);
+    const existing = fallbackAuthUsers.find((item) => item.email.toLowerCase() === String(payload.email || "").toLowerCase());
+
+    if (existing) {
+      throw new Error("Ja existe um usuario com este e-mail.");
+    }
+
+    const user = {
+      id: createFallbackId(),
+      nome: payload.nome,
+      email: String(payload.email || "").toLowerCase(),
+      password: payload.password,
+      role: payload.role || "recepcao",
+      ativo: payload.ativo ?? true,
+      permissions: []
+    };
+    fallbackAuthUsers.push(user);
+
+    return {
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        ativo: user.ativo,
+        permissions: user.permissions
+      }
+    };
+  }
+
+  if (routePath === "/auth/change-password" && method === "PUT") {
+    const payload = JSON.parse(options.body);
+    const session = getStoredAuthSession();
+    const user = fallbackAuthUsers.find((item) => item.email.toLowerCase() === String(session?.user?.email || "").toLowerCase());
+
+    if (!user || user.password !== payload.currentPassword) {
+      const error = new Error("Senha atual invalida.");
+      error.status = 401;
+      throw error;
+    }
+
+    user.password = payload.newPassword;
+    return { ok: true };
+  }
 
   if (method === "GET" && routePath === "/rooms") {
     const status = searchParams.get("status");
@@ -2748,6 +2921,30 @@ export async function apiPatch(path, payload) {
   return request(path, {
     method: "PATCH",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function loginRequest(payload) {
+  return apiPost("/auth/login", payload);
+}
+
+export async function logoutRequest() {
+  return request("/auth/logout", { method: "POST" });
+}
+
+export async function fetchCurrentUser() {
+  return apiGet("/auth/me");
+}
+
+export async function registerUser(payload) {
+  return apiPost("/auth/register", payload);
+}
+
+export async function changePassword(payload) {
+  return request("/auth/change-password", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" }
   });
 }
 

@@ -14,10 +14,22 @@ const __dirname = path.dirname(__filename);
 
 applySecurity(app);
 
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "https://hotel-erp-pousada.onrender.com",
+  env.appUrl
+].filter(Boolean));
+
 app.use(helmet());
 app.use(
   cors({
-    origin: env.appUrl
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS origin not allowed"));
+    }
   })
 );
 app.use(attachRequestContext);

@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { ProtectedRoute } from "./ProtectedRoute.jsx";
 import { Shell } from "../components/layout/Shell.jsx";
+import { LoginPage } from "../features/auth/LoginPage.jsx";
 import { DashboardPage } from "../features/dashboard/DashboardPage.jsx";
 import { RoomsPage } from "../features/rooms/RoomsPage.jsx";
 import { RoomAccommodationTypesPage } from "../features/rooms/RoomAccommodationTypesPage.jsx";
@@ -17,7 +19,8 @@ import { GuestAppPage } from "../features/checkin/GuestAppPage.jsx";
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Shell />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<ProtectedRoute><Shell /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="rooms" element={<RoomsPage />} />
@@ -38,6 +41,7 @@ export function App() {
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="/guest/:accountId" element={<GuestAppPage />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

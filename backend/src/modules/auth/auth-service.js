@@ -3,70 +3,64 @@ import jwt from "jsonwebtoken";
 import { query } from "../../config/database.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/app-error.js";
+import { buildPermissions } from "./role-permissions.js";
 
-const rolePermissions = {
-  admin: ["*"],
-  gerente: [
-    "dashboard.read",
-    "rooms.read",
-    "rooms.manage",
-    "reservations.read",
-    "reservations.manage",
-    "guests.read",
-    "guests.manage",
-    "stay.read",
-    "stay.manage",
-    "products.read",
-    "products.manage",
-    "orders.read",
-    "orders.manage",
-    "finance.read",
-    "finance.manage",
-    "fiscal.emit",
-    "fiscal.cancel",
-    "settings.read",
-    "settings.manage",
-    "logs.read"
-  ],
-  recepcao: [
-    "dashboard.read",
-    "rooms.read",
-    "reservations.manage",
-    "guests.manage",
-    "stay.manage",
-    "orders.read",
-    "finance.read"
-  ],
-  fiscal: [
-    "dashboard.read",
-    "finance.read",
-    "fiscal.emit",
-    "fiscal.cancel",
-    "settings.read",
-    "logs.read"
-  ],
-  caixa: [
-    "dashboard.read",
-    "products.read",
-    "pos.read",
-    "pos.manage",
-    "finance.read",
-    "fiscal.emit"
-  ]
-};
+function normalizeUserRow(user) {
+  return {
+    id: user.id,
+    nome: user.nome,
+    email: user.email,
+    role: user.papel,
+    ativo: user.ativo,
+    permissions: buildPermissions(user.papel),
+    created_at: user.created_at,
+    updated_at: user.updated_at
+  };
+}
 
 export class AuthService {
-  async login(email, password) {
+  async findUserByEmail(email) {
     const result = await query(
-      `SELECT id, nome, email, senha_hash, papel
+      `SELECT id, nome, email, senha_hash, papel, ativo, created_at, updated_at
        FROM usuarios
-       WHERE email = $1 AND ativo = true`,
+       WHERE LOWER(email) = LOWER($1)
+       LIMIT 1`,
       [email]
     );
 
-    const user = result.rows[0];
+    return result.rows[0] || null;
+  }
 
-    if (!user) {
+  async findUserById(id) {
+    const result = await query(
+      `SELECT id, nome, email, senha_hash, papel, ativo, created_at, updated_at
+       FROM usuarios
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    return result.rows[0] || null;
+  }
+
+  issueToken(user) {
+    return jwt.sign(
+      {
+        id: user.id,
+        name: user.nome,
+        email: user.email,
+        role: user.papel,
+        permissions: buildPermissions(user.papel)
+      },
+      env.jwtSecret,
+      { expiresIn: "12h" }
+    );
+  }
+
+  async login(email, password) {
+    const user = await this.findUserByEmail(email);
+
+    if (!user || !user.ativo) {
       throw new AppError("Credenciais invalidas.", 401);
     }
 
@@ -76,27 +70,68 @@ export class AuthService {
       throw new AppError("Credenciais invalidas.", 401);
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        name: user.nome,
-        email: user.email,
-        role: user.papel,
-        permissions: rolePermissions[user.papel] || []
-      },
-      env.jwtSecret,
-      { expiresIn: "12h" }
+    return {
+      token: this.issueToken(user),
+      user: normalizeUserRow(user)
+    };
+  }
+
+  async me(userId) {
+    const user = await this.findUserById(userId);
+
+    if (!user || !user.ativo) {
+      throw new AppError("Usuario nao encontrado.", 404);
+    }
+
+    return normalizeUserRow(user);
+  }
+
+  async register(payload) {
+    const existing = await this.findUserByEmail(payload.email);
+
+    if (existing) {
+      throw new AppError("Ja existe um usuario com este e-mail.", 409);
+    }
+
+    const passwordHash = await bcrypt.hash(payload.password, 10);
+    const result = await query(
+      `INSERT INTO usuarios (nome, email, senha_hash, papel, ativo)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, nome, email, senha_hash, papel, ativo, created_at, updated_at`,
+      [
+        payload.nome,
+        payload.email.toLowerCase(),
+        passwordHash,
+        payload.role,
+        payload.ativo ?? true
+      ]
     );
 
-    return {
-      token,
-      user: {
-        id: user.id,
-        nome: user.nome,
-        email: user.email,
-        papel: user.papel,
-        permissoes: rolePermissions[user.papel] || []
-      }
-    };
+    return normalizeUserRow(result.rows[0]);
+  }
+
+  async changePassword(userId, currentPassword, newPassword) {
+    const user = await this.findUserById(userId);
+
+    if (!user || !user.ativo) {
+      throw new AppError("Usuario nao encontrado.", 404);
+    }
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.senha_hash);
+
+    if (!passwordMatches) {
+      throw new AppError("Senha atual invalida.", 401);
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await query(
+      `UPDATE usuarios
+       SET senha_hash = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [userId, newPasswordHash]
+    );
+
+    return { ok: true };
   }
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { deleteCompanyLogo, fetchCompanySettings, updateCompanySettings, uploadCompanyLogo } from "../services/api";
+import { useAuth } from "./auth.jsx";
 import { useTheme } from "./theme.jsx";
 
 const CompanyContext = createContext(null);
@@ -36,13 +37,24 @@ const fallbackProfile = {
 };
 
 export function CompanyProvider({ children }) {
+  const { isAuthenticated, isLoadingAuth } = useAuth();
   const { setTheme } = useTheme();
   const [company, setCompany] = useState(fallbackProfile);
   const [isLoadingCompany, setIsLoadingCompany] = useState(true);
 
   useEffect(() => {
+    if (isLoadingAuth) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setCompany(fallbackProfile);
+      setIsLoadingCompany(false);
+      return;
+    }
+
     loadCompany();
-  }, []);
+  }, [isAuthenticated, isLoadingAuth]);
 
   async function loadCompany() {
     try {

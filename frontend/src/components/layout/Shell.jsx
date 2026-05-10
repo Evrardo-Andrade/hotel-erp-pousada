@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../../app/auth.jsx";
 import { useCompany } from "../../app/company.jsx";
 
 const menu = [
@@ -26,6 +27,7 @@ function getInitials(name) {
 
 export function Shell() {
   const location = useLocation();
+  const { user, logout } = useAuth();
   const { company } = useCompany();
   const isPosRoute = location.pathname.startsWith("/pos");
   const isRoomsRoute = location.pathname.startsWith("/rooms");
@@ -67,6 +69,7 @@ export function Shell() {
   const companyName = company?.trade_name || "Click7 Systems";
   const subtitle = company?.subtitle || "Hotel ERP - Operacao e fiscal";
   const brandInitials = useMemo(() => getInitials(companyName), [companyName]);
+  const userInitials = useMemo(() => getInitials(user?.nome || user?.email || "ERP"), [user]);
 
   return (
     <div className={`shell ${isSidebarCollapsed ? "shell-sidebar-collapsed" : ""}`}>
@@ -87,6 +90,14 @@ export function Shell() {
           <div className="brand-text">
             <strong>{companyName}</strong>
             <p className="sidebar-subtitle">{subtitle}</p>
+          </div>
+        </div>
+
+        <div className="sidebar-user-card" title={user?.nome || user?.email || "Usuario logado"}>
+          <span className="user-avatar">{userInitials}</span>
+          <div className="brand-text">
+            <strong>{user?.nome || "Usuario"}</strong>
+            <p className="sidebar-subtitle">{user?.role || "admin"}</p>
           </div>
         </div>
 
@@ -166,8 +177,16 @@ export function Shell() {
             </div>
           </div>
           <div className="topbar-card">
-            <span>Fiscal</span>
-            <strong>Ambiente de homologacao</strong>
+            <div className="topbar-user">
+              <span className="user-avatar">{userInitials}</span>
+              <div>
+                <span>Usuario logado</span>
+                <strong>{user?.nome || user?.email || "Administrador"}</strong>
+              </div>
+            </div>
+            <button type="button" className="ghost-button" onClick={logout}>
+              Logout
+            </button>
           </div>
         </header>
 
