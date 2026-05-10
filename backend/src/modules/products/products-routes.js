@@ -5,7 +5,7 @@ import { query } from "../../config/database.js";
 import { authorizePermission } from "../../middleware/auth.js";
 import { auditAction } from "../../middleware/audit.js";
 import { AppError } from "../../utils/app-error.js";
-import { uploadPublicFile, deleteStorageFile, streamFileToResponse } from "../../services/storage.js";
+import { uploadPublicFile, deleteStorageFile } from "../../services/storage.js";
 
 const router = Router();
 
@@ -221,4 +221,3 @@ router.delete("/:id/image", authorizePermission("products.manage"), auditAction(
 });
 
 export { router as productsRoutes };
-export { streamFileToResponse };

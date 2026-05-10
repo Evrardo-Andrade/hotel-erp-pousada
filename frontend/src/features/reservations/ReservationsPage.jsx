@@ -69,6 +69,13 @@ export function ReservationsPage() {
     return Array.from(unique.values());
   }, [metadata.quartos]);
 
+  function formatCurrency(value) {
+    return Number(value || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL"
+    });
+  }
+
   async function loadModule() {
     try {
       setIsLoading(true);
@@ -301,9 +308,10 @@ export function ReservationsPage() {
                     </div>
                     <div className="reservation-meta-grid">
                       <span>Quarto {reservation.quarto_numero}</span>
+                      <span>Diaria {formatCurrency(reservation.valor_diaria)}</span>
                       <span>{reservation.data_checkin} ate {reservation.data_checkout}</span>
                       <span>{reservation.numero_diarias} diarias</span>
-                      <span>R$ {Number(reservation.valor_total || 0).toFixed(2)}</span>
+                      <span>{formatCurrency(reservation.valor_total)}</span>
                     </div>
                   </div>
                   <div className="reservation-row-side">

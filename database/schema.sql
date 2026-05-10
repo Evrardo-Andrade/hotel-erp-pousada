@@ -29,6 +29,7 @@ ALTER TYPE reservation_status ADD VALUE IF NOT EXISTS 'pre_reserva';
 ALTER TYPE reservation_status ADD VALUE IF NOT EXISTS 'pendente';
 ALTER TYPE reservation_status ADD VALUE IF NOT EXISTS 'hospedado';
 ALTER TYPE reservation_status ADD VALUE IF NOT EXISTS 'no_show';
+ALTER TYPE room_status ADD VALUE IF NOT EXISTS 'reservado';
 ALTER TYPE room_status ADD VALUE IF NOT EXISTS 'bloqueado';
 ALTER TYPE sale_type ADD VALUE IF NOT EXISTS 'room_service';
 ALTER TYPE sale_type ADD VALUE IF NOT EXISTS 'consumo_interno';
@@ -88,6 +89,7 @@ CREATE TABLE IF NOT EXISTS quartos (
   andar INT,
   capacidade INT NOT NULL,
   status room_status NOT NULL DEFAULT 'livre',
+  valor_diaria NUMERIC(10,2) NOT NULL DEFAULT 0,
   descricao TEXT,
   observacoes TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -95,6 +97,7 @@ CREATE TABLE IF NOT EXISTS quartos (
 );
 
 ALTER TABLE quartos ADD COLUMN IF NOT EXISTS descricao TEXT;
+ALTER TABLE quartos ADD COLUMN IF NOT EXISTS valor_diaria NUMERIC(10,2) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS quartos_comodidades (
   quarto_id UUID NOT NULL REFERENCES quartos(id) ON DELETE CASCADE,
@@ -161,6 +164,8 @@ CREATE TABLE IF NOT EXISTS guest_documents (
   original_filename VARCHAR(255) NOT NULL,
   stored_filename VARCHAR(255) NOT NULL,
   file_path TEXT NOT NULL,
+  storage_key TEXT,
+  bucket_name TEXT,
   mime_type VARCHAR(120) NOT NULL,
   file_size BIGINT NOT NULL DEFAULT 0,
   description TEXT,
@@ -168,6 +173,9 @@ CREATE TABLE IF NOT EXISTS guest_documents (
   uploaded_at TIMESTAMP NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMP
 );
+
+ALTER TABLE guest_documents ADD COLUMN IF NOT EXISTS storage_key TEXT;
+ALTER TABLE guest_documents ADD COLUMN IF NOT EXISTS bucket_name TEXT;
 
 CREATE TABLE IF NOT EXISTS guest_lgpd_consents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -254,6 +262,7 @@ CREATE TABLE IF NOT EXISTS produtos (
   internal_code VARCHAR(60),
   image_url TEXT,
   image_filename VARCHAR(220),
+  image_storage_key TEXT,
   tipo_produto VARCHAR(30) NOT NULL DEFAULT 'consumo',
   permite_combo BOOLEAN NOT NULL DEFAULT false,
   ativo BOOLEAN NOT NULL DEFAULT true,
@@ -266,6 +275,7 @@ ALTER TABLE produtos ADD COLUMN IF NOT EXISTS permite_combo BOOLEAN NOT NULL DEF
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS internal_code VARCHAR(60);
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS image_filename VARCHAR(220);
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS image_storage_key TEXT;
 
 CREATE TABLE IF NOT EXISTS estoque (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -536,6 +546,7 @@ CREATE TABLE IF NOT EXISTS company_settings (
   country VARCHAR(80),
   logo_url TEXT,
   logo_filename VARCHAR(255),
+  logo_storage_key TEXT,
   primary_color VARCHAR(20),
   default_theme VARCHAR(40),
   admin_name VARCHAR(160),

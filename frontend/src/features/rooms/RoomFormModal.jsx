@@ -11,11 +11,29 @@ const initialForm = {
   tipo_quarto_id: "",
   capacidade: 1,
   andar: "",
+  valor_diaria: "0,00",
   status: "livre",
   descricao: "",
   manual_descricao: "",
   comodidade_ids: []
 };
+
+function parseCurrencyInput(value) {
+  const normalized = String(value || "")
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
+function formatCurrencyInput(value) {
+  const amount = typeof value === "number" ? value : parseCurrencyInput(value);
+  return amount.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
 
 function extractManualDescription(description) {
   const lines = String(description || "")
@@ -83,6 +101,7 @@ function normalizeRoom(room) {
     tipo_quarto_id: room.tipo_quarto_id || "",
     capacidade: room.capacidade || 1,
     andar: room.andar ?? "",
+    valor_diaria: formatCurrencyInput(room.valor_diaria || 0),
     status: room.status || "livre",
     descricao: buildDescription(manualDescription, room.comodidades || []),
     manual_descricao: manualDescription,
@@ -154,6 +173,14 @@ export function RoomFormModal({
       return;
     }
 
+    if (name === "valor_diaria") {
+      setForm((current) => ({
+        ...current,
+        valor_diaria: value
+      }));
+      return;
+    }
+
     setForm((current) => ({
       ...current,
       [name]: value
@@ -166,6 +193,7 @@ export function RoomFormModal({
       ...form,
       capacidade: Number(form.capacidade),
       andar: form.andar === "" ? null : Number(form.andar),
+      valor_diaria: parseCurrencyInput(form.valor_diaria),
       descricao: form.descricao.trim() || null
     });
   }
@@ -288,6 +316,7 @@ export function RoomFormModal({
                   <select name="status" value={form.status} onChange={handleChange} required>
                     <option value="livre">Livre</option>
                     <option value="ocupado">Ocupado</option>
+                    <option value="reservado">Reservado</option>
                     <option value="limpeza">Limpeza</option>
                     <option value="manutencao">Manutencao</option>
                     <option value="bloqueado">Bloqueado</option>
@@ -314,6 +343,22 @@ export function RoomFormModal({
                     value={form.andar}
                     onChange={handleChange}
                     placeholder="Opcional"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Valor da diaria</span>
+                  <input
+                    name="valor_diaria"
+                    type="text"
+                    inputMode="decimal"
+                    value={form.valor_diaria}
+                    onChange={handleChange}
+                    onBlur={() => setForm((current) => ({
+                      ...current,
+                      valor_diaria: formatCurrencyInput(current.valor_diaria)
+                    }))}
+                    placeholder="0,00"
                   />
                 </label>
               </div>

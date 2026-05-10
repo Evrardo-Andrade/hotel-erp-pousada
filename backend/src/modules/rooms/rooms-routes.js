@@ -9,6 +9,32 @@ import { broadcastRoomStatus } from "../../services/room-service-events.js";
 
 const router = Router();
 
+const allowedRoomStatuses = ["livre", "ocupado", "limpeza", "manutencao", "reservado", "bloqueado"];
+
+function normalizeAmenityIds(payload) {
+  if (Array.isArray(payload.comodidade_ids)) {
+    return payload.comodidade_ids;
+  }
+
+  if (!Array.isArray(payload.comodidades)) {
+    return [];
+  }
+
+  return payload.comodidades
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+
+      if (item && typeof item === "object" && typeof item.id === "string") {
+        return item.id;
+      }
+
+      return null;
+    })
+    .filter(Boolean);
+}
+
 function logRoomDebug(event, request, payload) {
   if (!env.debugRooms) {
     return;
@@ -19,7 +45,8 @@ function logRoomDebug(event, request, payload) {
     user: {
       id: request.user?.id || null,
       email: request.user?.email || null,
-      role: request.user?.role || null
+      role: request.user?.role || null,
+      permissions: request.user?.permissions || []
     },
     payload
   });
@@ -106,8 +133,7 @@ router.get("/", authorizePermission("rooms.read"), async (request, response) => 
   const status = request.query.status ? String(request.query.status) : "";
 
   if (status) {
-    const allowedStatus = ["livre", "ocupado", "limpeza", "manutencao", "bloqueado"];
-    if (!allowedStatus.includes(status)) {
+    if (!allowedRoomStatuses.includes(status)) {
       throw new AppError("Status de quarto invalido.", 400);
     }
 
@@ -122,19 +148,22 @@ router.post("/", authorizePermission("rooms.manage"), auditAction("create", "qua
     numero: z.string().min(1),
     tipo_acomodacao_id: z.string().uuid(),
     tipo_quarto_id: z.string().uuid(),
-    status: z.enum(["livre", "ocupado", "limpeza", "manutencao", "bloqueado"]).optional(),
+    status: z.enum(allowedRoomStatuses).optional(),
     capacidade: z.number().int().positive(),
     andar: z.number().int().nullable().optional(),
     descricao: z.string().max(1200).nullable().optional(),
-    comodidade_ids: z.array(z.string().uuid()).default([])
+    valor_diaria: z.number().nonnegative().optional().default(0),
+    comodidade_ids: z.array(z.string().uuid()).optional(),
+    comodidades: z.array(z.union([z.string().uuid(), z.object({ id: z.string().uuid() })])).optional()
   });
 
   const data = schema.parse(request.body);
+  const amenityIds = normalizeAmenityIds(data);
 
   const result = await query(
     `INSERT INTO quartos (
-      numero, tipo_acomodacao_id, tipo_quarto_id, capacidade, andar, descricao, status
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      numero, tipo_acomodacao_id, tipo_quarto_id, capacidade, andar, descricao, valor_diaria, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *`,
     [
       data.numero,
@@ -143,11 +172,12 @@ router.post("/", authorizePermission("rooms.manage"), auditAction("create", "qua
       data.capacidade,
       data.andar ?? null,
       data.descricao || null,
+      data.valor_diaria ?? 0,
       data.status || "livre"
     ]
   );
 
-  await syncRoomAmenities(result.rows[0].id, data.comodidade_ids);
+  await syncRoomAmenities(result.rows[0].id, amenityIds);
   const [fullRoom] = await listRoomDetails("WHERE q.id = $1", [result.rows[0].id]);
 
   broadcastRoomStatus({ kind: "created", room: fullRoom });
@@ -196,23 +226,27 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
     numero: z.string().min(1),
     tipo_acomodacao_id: z.string().uuid(),
     tipo_quarto_id: z.string().uuid(),
-    status: z.enum(["livre", "ocupado", "limpeza", "manutencao", "bloqueado"]).optional(),
+    status: z.enum(allowedRoomStatuses).optional(),
     capacidade: z.number().int().positive(),
     andar: z.number().int().nullable().optional(),
     descricao: z.string().max(1200).nullable().optional(),
-    comodidade_ids: z.array(z.string().uuid()).default([])
+    valor_diaria: z.number().nonnegative().optional().default(0),
+    comodidade_ids: z.array(z.string().uuid()).optional(),
+    comodidades: z.array(z.union([z.string().uuid(), z.object({ id: z.string().uuid() })])).optional()
   });
 
   const data = schema.parse(request.body);
+  const amenityIds = normalizeAmenityIds(data);
   logRoomDebug("update-request", request, {
     numero: data.numero,
     status: data.status || "livre",
     capacidade: data.capacidade,
     andar: data.andar ?? null,
+    valor_diaria: data.valor_diaria ?? 0,
     tipo_acomodacao_id: data.tipo_acomodacao_id,
     tipo_quarto_id: data.tipo_quarto_id,
     descricaoLength: data.descricao?.length || 0,
-    comodidade_ids: data.comodidade_ids
+    comodidade_ids: amenityIds
   });
 
   const result = await query(
@@ -223,7 +257,8 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
          capacidade = $5,
          andar = $6,
          descricao = $7,
-         status = $8,
+         valor_diaria = $8,
+         status = $9,
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -235,6 +270,7 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
       data.capacidade,
       data.andar ?? null,
       data.descricao || null,
+      data.valor_diaria ?? 0,
       data.status || "livre"
     ]
   );
@@ -243,7 +279,7 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
     throw new AppError("Quarto nao encontrado.", 404);
   }
 
-  await syncRoomAmenities(request.params.id, data.comodidade_ids);
+  await syncRoomAmenities(request.params.id, amenityIds);
   const [fullRoom] = await listRoomDetails("WHERE q.id = $1", [request.params.id]);
   logRoomDebug("update-success", request, {
     persistedRoomId: request.params.id,
@@ -257,7 +293,7 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
 
 router.patch("/:id/status", authorizePermission("rooms.manage"), auditAction("update_status", "quartos"), async (request, response) => {
   const schema = z.object({
-    status: z.enum(["livre", "ocupado", "limpeza", "manutencao", "bloqueado"])
+    status: z.enum(allowedRoomStatuses)
   });
 
   const { status } = schema.parse(request.body);

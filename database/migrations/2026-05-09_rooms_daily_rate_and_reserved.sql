@@ -1,0 +1,4 @@
+ALTER TYPE room_status ADD VALUE IF NOT EXISTS 'reservado';
+
+ALTER TABLE quartos
+  ADD COLUMN IF NOT EXISTS valor_diaria NUMERIC(10,2) NOT NULL DEFAULT 0;

@@ -52,6 +52,13 @@ function calculateNights(checkin, checkout) {
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
 export function ReservationDrawer({
   isOpen,
   mode,
@@ -152,6 +159,17 @@ export function ReservationDrawer({
       documento: guest?.cpf || "",
       telefone: guest?.telefone || "",
       email: guest?.email || ""
+    }));
+  }
+
+  function handleRoomChange(roomId) {
+    const room = metadata.quartos.find((item) => item.id === roomId);
+    setForm((current) => ({
+      ...current,
+      quarto_id: roomId,
+      tipo_acomodacao_id: room?.tipo_acomodacao_id || current.tipo_acomodacao_id,
+      tipo_quarto_id: room?.tipo_quarto_id || current.tipo_quarto_id,
+      valor_diaria: room ? Number(room.valor_diaria || 0) : current.valor_diaria
     }));
   }
 
@@ -362,11 +380,17 @@ export function ReservationDrawer({
               </label>
               <label className="field span-two">
                 <span>Quarto disponivel</span>
-                <select name="quarto_id" value={form.quarto_id} onChange={handleChange} required disabled={mode === "view"}>
+                <select
+                  name="quarto_id"
+                  value={form.quarto_id}
+                  onChange={(event) => handleRoomChange(event.target.value)}
+                  required
+                  disabled={mode === "view"}
+                >
                   <option value="">Selecione</option>
                   {availableRooms.map((room) => (
                     <option key={room.id} value={room.id}>
-                      Quarto {room.numero} - {room.tipo_acomodacao} / {room.tipo_quarto}
+                      Quarto {room.numero} - {room.tipo_acomodacao} / {room.tipo_quarto} - {formatCurrency(room.valor_diaria)}
                     </option>
                   ))}
                 </select>
@@ -375,6 +399,7 @@ export function ReservationDrawer({
                 <div className="data-highlight span-two">
                   <strong>Capacidade maxima: {selectedRoom.capacidade}</strong>
                   <span>Status operacional: {selectedRoom.status}</span>
+                  <span>Diaria sugerida: {formatCurrency(selectedRoom.valor_diaria)}</span>
                 </div>
               ) : null}
             </div>
@@ -422,10 +447,10 @@ export function ReservationDrawer({
                 <input name="valor_pago" type="number" min="0" step="0.01" value={form.valor_pago} onChange={handleChange} disabled={mode === "view"} />
               </label>
               <div className="payment-summary span-two">
-                <span>Hospedagem: R$ {computed.subtotal.toFixed(2)}</span>
-                <span>Combos: R$ {computed.comboTotal.toFixed(2)}</span>
-                <strong>Total: R$ {computed.total.toFixed(2)}</strong>
-                <strong>Saldo pendente: R$ {computed.pending.toFixed(2)}</strong>
+                <span>Hospedagem: {formatCurrency(computed.subtotal)}</span>
+                <span>Combos: {formatCurrency(computed.comboTotal)}</span>
+                <strong>Total: {formatCurrency(computed.total)}</strong>
+                <strong>Saldo pendente: {formatCurrency(computed.pending)}</strong>
               </div>
             </div>
           </section>

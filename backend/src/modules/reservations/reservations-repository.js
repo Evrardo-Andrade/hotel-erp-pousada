@@ -78,7 +78,7 @@ export class ReservationsRepository {
     const [guests, rooms, products, combos] = await Promise.all([
       query(`SELECT id, nome, cpf, email, telefone FROM hospedes ORDER BY nome`),
       query(
-        `SELECT q.id, q.numero, q.capacidade, q.status,
+        `SELECT q.id, q.numero, q.capacidade, q.status, q.valor_diaria,
                 ta.nome AS tipo_acomodacao, tq.nome AS tipo_quarto,
                 q.tipo_acomodacao_id, q.tipo_quarto_id
          FROM quartos q
@@ -272,6 +272,7 @@ export class ReservationsRepository {
 
     const result = await query(
       `SELECT q.id, q.numero, q.capacidade, q.status,
+              q.valor_diaria,
               ta.nome AS tipo_acomodacao, tq.nome AS tipo_quarto
        FROM quartos q
        JOIN tipos_acomodacao ta ON ta.id = q.tipo_acomodacao_id

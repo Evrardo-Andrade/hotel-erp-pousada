@@ -75,7 +75,12 @@ export class ReservationsService {
 
   buildPayload(input, room) {
     const numero_diarias = calculateNights(input.data_checkin, input.data_checkout);
-    const subtotal_hospedagem = numero_diarias * toNumber(input.valor_diaria);
+    const valor_diaria = toNumber(
+      input.valor_diaria !== undefined && input.valor_diaria !== null
+        ? input.valor_diaria
+        : room.valor_diaria
+    );
+    const subtotal_hospedagem = numero_diarias * valor_diaria;
     const valor_total =
       subtotal_hospedagem +
       toNumber(input.taxas_adicionais) -
@@ -93,6 +98,7 @@ export class ReservationsService {
       codigo_reserva: input.codigo_reserva || buildReservationCode(),
       quantidade_hospedes,
       numero_diarias,
+      valor_diaria,
       subtotal_hospedagem,
       taxas_adicionais: toNumber(input.taxas_adicionais),
       desconto: toNumber(input.desconto),

@@ -43,13 +43,22 @@ const routeDefaults = {
   all: "all",
   ocupado: "ocupado",
   livre: "livre",
+  reservado: "reservado",
   limpeza: "limpeza",
   manutencao: "manutencao"
 };
 
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
 function normalizeRoomRecord(room) {
   return {
     ...room,
+    valor_diaria: Number(room.valor_diaria || 0),
     comodidades: room.comodidades || [],
     descricao: room.descricao || room.observacoes || ""
   };
@@ -64,7 +73,7 @@ function formatRoomApiError(error, fallbackMessage) {
     return "Usuario sem permissao para alterar acomodacoes.";
   }
 
-  if (error?.status === 400 && Array.isArray(error?.details) && error.details.length) {
+  if ((error?.status === 400 || error?.status === 422) && Array.isArray(error?.details) && error.details.length) {
     const firstIssue = error.details[0];
     const fieldName = Array.isArray(firstIssue?.path) ? firstIssue.path.join(".") : "";
     return fieldName
@@ -408,6 +417,7 @@ export function RoomsPage({
                 <strong>{room.numero}</strong>
                 <small>{room.displayStatusLabel}</small>
                 <small>{room.tipo_quarto}</small>
+                <small>{formatCurrency(room.valor_diaria)}</small>
                 {room.guestName ? <span className="room-map-meta">{room.guestName}</span> : null}
               </button>
             ))}
@@ -430,6 +440,7 @@ export function RoomsPage({
                   >
                     <option value="livre">Livre</option>
                     <option value="ocupado">Ocupado</option>
+                    <option value="reservado">Reservado</option>
                     <option value="limpeza">Limpeza</option>
                     <option value="manutencao">Manutencao</option>
                     <option value="bloqueado">Bloqueado</option>
@@ -439,6 +450,7 @@ export function RoomsPage({
                 <small>{room.tipo_quarto}</small>
                 <small>Capacidade: {room.capacidade} hospedes</small>
                 <small>{room.andar !== null && room.andar !== undefined ? `Andar: ${room.andar}` : "Sem andar informado"}</small>
+                <small>Diaria base: {formatCurrency(room.valor_diaria)}</small>
                 {room.guestName ? <small>Hospede atual: {room.guestName}</small> : null}
                 {room.descricao ? (
                   <div className="room-description">{room.descricao}</div>

@@ -184,19 +184,25 @@ export function GuestsPage() {
     }
   }
 
-  async function handleViewDocument(document) {
+  async function handleViewDocument(guestDocument) {
     try {
-      const result = await viewGuestDocument(selectedGuest.id, document.id);
+      setErrorMessage("");
+      const result = await viewGuestDocument(selectedGuest.id, guestDocument.id);
       window.open(result.content_url, "_blank");
     } catch (error) {
       setFeedback({ type: "error", message: error.message || "Nao foi possivel visualizar o documento." });
     }
   }
 
-  async function handleDownloadDocument(document) {
+  async function handleDownloadDocument(guestDocument) {
     try {
-      const result = await downloadGuestDocument(selectedGuest.id, document.id);
-      window.open(result.content_url, "_blank");
+      setErrorMessage("");
+      const result = await downloadGuestDocument(selectedGuest.id, guestDocument.id);
+      const anchor = window.document.createElement("a");
+      anchor.href = result.content_url;
+      anchor.download = result.filename || guestDocument.original_filename || "documento";
+      anchor.rel = "noopener";
+      anchor.click();
     } catch (error) {
       setFeedback({ type: "error", message: error.message || "Nao foi possivel baixar o documento." });
     }

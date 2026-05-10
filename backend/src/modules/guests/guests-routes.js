@@ -12,7 +12,23 @@ const router = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 }
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_request, file, callback) => {
+    const allowed = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp"
+    ];
+
+    if (!allowed.includes(file.mimetype)) {
+      callback(new AppError("Tipo de arquivo invalido. Use PDF, JPG, JPEG, PNG ou WEBP.", 422));
+      return;
+    }
+
+    callback(null, true);
+  }
 });
 
 const guestSchema = z.object({
@@ -344,7 +360,7 @@ router.post(
       throw new AppError("Selecione um arquivo para upload.", 400);
     }
 
-    const { storageKey } = await uploadPrivateFile(
+    const { storageKey, bucketName } = await uploadPrivateFile(
       request.file.buffer,
       request.file.originalname,
       request.file.mimetype
@@ -355,8 +371,8 @@ router.post(
     const result = await query(
       `INSERT INTO guest_documents (
         guest_id, document_type, original_filename, stored_filename, file_path,
-        mime_type, file_size, description, uploaded_by, storage_key, uploaded_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        mime_type, file_size, description, uploaded_by, storage_key, bucket_name, uploaded_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
        RETURNING id, guest_id, document_type, original_filename, stored_filename, mime_type, file_size, description, uploaded_by, uploaded_at`,
       [
         request.params.id,
@@ -368,7 +384,8 @@ router.post(
         request.file.size,
         request.body.description || null,
         request.user?.id || "system",
-        storageKey
+        storageKey,
+        bucketName
       ]
     );
 
@@ -408,8 +425,9 @@ router.get("/:id/documents/:documentId/view", authorizePermission("guests.manage
   );
 
   const storageKey = document.storage_key || document.file_path;
+  const bucketName = document.bucket_name || null;
 
-  if (!storageKey || !storageKey.startsWith("private:")) {
+  if (!storageKey) {
     throw new AppError("Arquivo nao disponivel no armazenamento persistente.", 404);
   }
 
@@ -418,7 +436,7 @@ router.get("/:id/documents/:documentId/view", authorizePermission("guests.manage
     `inline; filename="${encodeURIComponent(document.original_filename)}"`
   );
 
-  await streamFileToResponse(storageKey, response);
+  await streamFileToResponse(storageKey, response, { bucketName });
 });
 
 router.get("/:id/documents/:documentId/download", authorizePermission("guests.manage"), async (request, response) => {
@@ -448,8 +466,9 @@ router.get("/:id/documents/:documentId/download", authorizePermission("guests.ma
   );
 
   const storageKey = document.storage_key || document.file_path;
+  const bucketName = document.bucket_name || null;
 
-  if (!storageKey || !storageKey.startsWith("private:")) {
+  if (!storageKey) {
     throw new AppError("Arquivo nao disponivel no armazenamento persistente.", 404);
   }
 
@@ -458,19 +477,20 @@ router.get("/:id/documents/:documentId/download", authorizePermission("guests.ma
     `attachment; filename="${encodeURIComponent(document.original_filename)}"`
   );
 
-  await streamFileToResponse(storageKey, response);
+  await streamFileToResponse(storageKey, response, { bucketName });
 });
 
 router.delete("/:id/documents/:documentId", authorizePermission("guests.manage"), auditAction("delete", "guest_documents"), async (request, response) => {
   const result = await query(
-    `SELECT storage_key, file_path FROM guest_documents WHERE id = $1 AND guest_id = $2`,
+    `SELECT storage_key, file_path, bucket_name FROM guest_documents WHERE id = $1 AND guest_id = $2`,
     [request.params.documentId, request.params.id]
   );
 
   if (result.rows.length) {
     const key = result.rows[0].storage_key || result.rows[0].file_path;
-    if (key && key.startsWith("private:")) {
-      await deleteStorageFile(key).catch(() => {});
+    const bucketName = result.rows[0].bucket_name || null;
+    if (key) {
+      await deleteStorageFile(key, { bucketName }).catch(() => {});
     }
   }
 

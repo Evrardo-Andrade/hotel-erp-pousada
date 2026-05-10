@@ -22,7 +22,7 @@ const reservationSchema = z.object({
   tipo_acomodacao_id: z.string().uuid().optional(),
   tipo_quarto_id: z.string().uuid().optional(),
   quarto_id: z.string().uuid(),
-  valor_diaria: z.number().nonnegative(),
+  valor_diaria: z.number().nonnegative().optional().default(0),
   taxas_adicionais: z.number().nonnegative().default(0),
   desconto: z.number().nonnegative().default(0),
   forma_pagamento: z.string().optional(),

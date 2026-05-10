@@ -92,6 +92,7 @@ const fallbackStore = {
       status: "ocupado",
       capacidade: 2,
       andar: 1,
+      valor_diaria: 320,
       descricao: "Suite premium com varanda e vista para piscina.",
       comodidades: [
         { id: "am-1", nome: "Ar Condicionado" },
@@ -110,6 +111,7 @@ const fallbackStore = {
       status: "livre",
       capacidade: 2,
       andar: 1,
+      valor_diaria: 260,
       descricao: "",
       comodidades: [
         { id: "am-5", nome: "Wi-Fi" },
@@ -126,6 +128,7 @@ const fallbackStore = {
       status: "limpeza",
       capacidade: 5,
       andar: 2,
+      valor_diaria: 390,
       descricao: "Chale familiar com mais espaco interno.",
       comodidades: [
         { id: "am-5", nome: "Wi-Fi" },
@@ -144,6 +147,7 @@ const fallbackStore = {
       status: "manutencao",
       capacidade: 4,
       andar: 2,
+      valor_diaria: 450,
       descricao: "",
       comodidades: []
     }
@@ -873,6 +877,7 @@ fallbackStore["/reservations/metadata"].quartos = fallbackStore["/rooms"].map((r
   numero: room.numero,
   capacidade: room.capacidade,
   status: room.status,
+  valor_diaria: Number(room.valor_diaria || 0),
   tipo_acomodacao: room.tipo_acomodacao,
   tipo_quarto: room.tipo_quarto,
   tipo_acomodacao_id: room.tipo_acomodacao_id,
@@ -899,23 +904,58 @@ async function parseResponse(response) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const error = new Error(data?.message || "Falha na requisicao.");
-    error.status = response.status;
-    error.code = data?.code || null;
-    error.details = data?.details || null;
-
-    if (
-      response.status === 401 &&
-      ["AUTH_TOKEN_MISSING", "AUTH_TOKEN_INVALID", "AUTH_TOKEN_EXPIRED"].includes(data?.code)
-    ) {
-      clearStoredAuthSession();
-      window.dispatchEvent(new CustomEvent("hotel-erp-auth-expired"));
-    }
-
-    throw error;
+    throw buildApiError(response, data);
   }
 
   return data;
+}
+
+function buildApiError(response, data) {
+  const error = new Error(data?.message || "Falha na requisicao.");
+  error.status = response.status;
+  error.code = data?.code || null;
+  error.details = data?.details || null;
+
+  if (
+    response.status === 401 &&
+    ["AUTH_TOKEN_MISSING", "AUTH_TOKEN_INVALID", "AUTH_TOKEN_EXPIRED"].includes(data?.code)
+  ) {
+    clearStoredAuthSession();
+    window.dispatchEvent(new CustomEvent("hotel-erp-auth-expired"));
+  }
+
+  return error;
+}
+
+function getRequestConfig(options = {}) {
+  const config = {
+    ...options,
+    headers: getHeaders(options.headers)
+  };
+
+  if (
+    config.body &&
+    !(config.body instanceof FormData) &&
+    !config.headers["Content-Type"]
+  ) {
+    config.headers["Content-Type"] = "application/json";
+  }
+
+  return config;
+}
+
+function extractFilenameFromDisposition(disposition) {
+  if (!disposition) {
+    return "";
+  }
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const simpleMatch = disposition.match(/filename="?([^"]+)"?/i);
+  return simpleMatch?.[1] || "";
 }
 
 function cloneFallback(path) {
@@ -1119,6 +1159,11 @@ function buildFallbackGuestRecord(payload, current = null) {
 
 function getFallbackRoomLabels(room) {
   const metadata = fallbackStore["/rooms/metadata"];
+  const amenityIds = Array.isArray(room.comodidade_ids)
+    ? room.comodidade_ids
+    : Array.isArray(room.comodidades)
+      ? room.comodidades.map((item) => typeof item === "string" ? item : item?.id).filter(Boolean)
+      : [];
   const accommodation = metadata.tiposAcomodacao.find(
     (item) => item.id === room.tipo_acomodacao_id
   );
@@ -1129,9 +1174,13 @@ function getFallbackRoomLabels(room) {
   return {
     tipo_acomodacao: accommodation?.nome || "",
     tipo_quarto: roomType?.nome || "",
+    valor_diaria:
+      typeof room.valor_diaria === "number"
+        ? room.valor_diaria
+        : Number(roomType?.diaria_base || 0),
     comodidades:
       metadata.comodidades.filter((item) =>
-        (room.comodidade_ids || []).includes(item.id)
+        amenityIds.includes(item.id)
       ) || []
   };
 }
@@ -1394,6 +1443,7 @@ function filterAvailableRooms(payload) {
     numero: room.numero,
     capacidade: room.capacidade,
     status: room.status,
+    valor_diaria: Number(room.valor_diaria || 0),
     tipo_acomodacao: room.tipo_acomodacao,
     tipo_quarto: room.tipo_quarto
   }));
@@ -1402,24 +1452,13 @@ function filterAvailableRooms(payload) {
 async function request(path, options = {}) {
   const [routePath] = path.split("?");
   const method = String(options.method || "GET").toUpperCase();
-  const config = {
-    ...options,
-    headers: getHeaders(options.headers)
-  };
-
-  if (
-    config.body &&
-    !(config.body instanceof FormData) &&
-    !config.headers["Content-Type"]
-  ) {
-    config.headers["Content-Type"] = "application/json";
-  }
+  const config = getRequestConfig(options);
 
   try {
     const response = await fetch(`${API_URL}${path}`, config);
     return await parseResponse(response);
   } catch (error) {
-    if (error?.status === 401 || error?.status === 403) {
+    if (typeof error?.status === "number") {
       throw error;
     }
 
@@ -1451,6 +1490,50 @@ async function request(path, options = {}) {
       routePath.startsWith("/room-amenities") ||
       routePath.startsWith("/room-accommodation-types") ||
       routePath.startsWith("/room-types")
+    ) {
+      return fallbackRequest(path, config);
+    }
+
+    throw error;
+  }
+}
+
+async function requestBinary(path, options = {}) {
+  const [routePath] = path.split("?");
+  const config = getRequestConfig(options);
+
+  try {
+    const response = await fetch(`${API_URL}${path}`, config);
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!response.ok) {
+      const data = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : null;
+      throw buildApiError(response, data);
+    }
+
+    if (contentType.includes("application/json")) {
+      return await response.json().catch(() => null);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+
+    return {
+      content_url: objectUrl,
+      filename: extractFilenameFromDisposition(response.headers.get("content-disposition") || ""),
+      mime_type: blob.type || contentType
+    };
+  } catch (error) {
+    if (typeof error?.status === "number") {
+      throw error;
+    }
+
+    if (
+      routePath in fallbackStore ||
+      routePath.startsWith("/guests/")
     ) {
       return fallbackRequest(path, config);
     }
@@ -1843,6 +1926,7 @@ async function fallbackRequest(path, options) {
       id: createFallbackId(),
       status: payload.status || "livre",
       ...payload,
+      valor_diaria: Number(payload.valor_diaria || 0),
       descricao: payload.descricao || "",
       ...getFallbackRoomLabels(payload)
     };
@@ -1866,6 +1950,7 @@ async function fallbackRequest(path, options) {
       ...current,
       ...payload,
       status: payload.status || current.status || "livre",
+      valor_diaria: Number(payload.valor_diaria ?? current.valor_diaria ?? 0),
       descricao: payload.descricao || "",
       ...getFallbackRoomLabels(payload)
     };
@@ -3283,11 +3368,11 @@ export async function uploadGuestDocument(guestId, payload) {
 }
 
 export async function viewGuestDocument(guestId, documentId) {
-  return apiGet(`/guests/${guestId}/documents/${documentId}/view`);
+  return requestBinary(`/guests/${guestId}/documents/${documentId}/view`);
 }
 
 export async function downloadGuestDocument(guestId, documentId) {
-  return apiGet(`/guests/${guestId}/documents/${documentId}/download`);
+  return requestBinary(`/guests/${guestId}/documents/${documentId}/download`);
 }
 
 export async function deleteGuestDocument(guestId, documentId) {

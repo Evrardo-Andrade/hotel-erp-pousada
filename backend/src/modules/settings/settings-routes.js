@@ -1,6 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { Router } from "express";
 import { z } from "zod";
@@ -9,16 +6,13 @@ import { authorizePermission } from "../../middleware/auth.js";
 import { auditAction } from "../../middleware/audit.js";
 import { encrypt } from "../../utils/crypto.js";
 import { AppError } from "../../utils/app-error.js";
+import { deleteStorageFile, uploadPublicFile } from "../../services/storage.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 4 * 1024 * 1024 }
 });
 const router = Router();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDirectory = path.resolve(__dirname, "../../../uploads/company");
 
 const companySchema = z.object({
   trade_name: z.string().optional().or(z.literal("")),
@@ -49,16 +43,12 @@ const companySchema = z.object({
   subtitle: z.string().optional().or(z.literal(""))
 });
 
-async function ensureUploadsDirectory() {
-  await fs.mkdir(uploadsDirectory, { recursive: true });
-}
-
 async function getCurrentCompany() {
   const result = await query(
     `SELECT *
      FROM company_settings
-     ORDER BY created_at
-     LIMIT 1`
+      ORDER BY created_at
+      LIMIT 1`
   );
 
   return result.rows[0] || null;
@@ -199,35 +189,45 @@ router.post("/company/logo", authorizePermission("settings.manage"), auditAction
     throw new AppError("Selecione uma logo para upload.", 400);
   }
 
-  await ensureUploadsDirectory();
-  const extension = path.extname(request.file.originalname || "").toLowerCase();
-  const allowed = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg"]);
+  const allowed = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/svg+xml"
+  ]);
 
-  if (!allowed.has(extension)) {
+  if (!allowed.has(request.file.mimetype)) {
     throw new AppError("Formato de logomarca nao permitido.", 400);
   }
 
-  const safeName = `${Date.now()}-${request.file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-  const physicalPath = path.join(uploadsDirectory, safeName);
-  await fs.writeFile(physicalPath, request.file.buffer);
-
   const current = await getCurrentCompany();
+  if (current?.logo_storage_key) {
+    await deleteStorageFile(current.logo_storage_key).catch(() => {});
+  }
+
+  const { storageKey, imageUrl } = await uploadPublicFile(
+    request.file.buffer,
+    request.file.originalname,
+    request.file.mimetype,
+    { folder: "company" }
+  );
   let result;
 
   if (current) {
     result = await query(
       `UPDATE company_settings
-       SET logo_url = $2, logo_filename = $3, updated_at = NOW()
+       SET logo_url = $2, logo_filename = $3, logo_storage_key = $4, updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [current.id, `/uploads/company/${safeName}`, safeName]
+      [current.id, imageUrl, request.file.originalname, storageKey]
     );
   } else {
     result = await query(
-      `INSERT INTO company_settings (trade_name, legal_name, logo_url, logo_filename)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO company_settings (trade_name, legal_name, logo_url, logo_filename, logo_storage_key)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      ["Click7 Systems", "Click7 Systems", `/uploads/company/${safeName}`, safeName]
+      ["Click7 Systems", "Click7 Systems", imageUrl, request.file.originalname, storageKey]
     );
   }
 
@@ -246,13 +246,18 @@ router.delete("/company/logo", authorizePermission("settings.manage"), auditActi
       legal_name: "Click7 Systems",
       logo_url: "",
       logo_filename: "",
+      logo_storage_key: "",
       subtitle: "Hotel ERP - Operacao e fiscal"
     });
   }
 
+  if (current.logo_storage_key) {
+    await deleteStorageFile(current.logo_storage_key).catch(() => {});
+  }
+
   const result = await query(
     `UPDATE company_settings
-     SET logo_url = NULL, logo_filename = NULL, updated_at = NOW()
+     SET logo_url = NULL, logo_filename = NULL, logo_storage_key = NULL, updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
     [current.id]

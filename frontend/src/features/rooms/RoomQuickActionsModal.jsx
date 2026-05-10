@@ -1,3 +1,10 @@
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
 export function RoomQuickActionsModal({
   room,
   onClose,
@@ -60,6 +67,7 @@ export function RoomQuickActionsModal({
         <div className="room-quick-summary">
           <span className={`status-pill status-${room.displayStatus}`}>{room.displayStatusLabel}</span>
           <span>Capacidade: {room.capacidade}</span>
+          <span>Diaria: {formatCurrency(room.valor_diaria)}</span>
           <span>{room.guestName ? `Hospede: ${room.guestName}` : "Sem hospedagem ativa"}</span>
         </div>
 
