@@ -1,12 +1,29 @@
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../../config/database.js";
+import { env } from "../../config/env.js";
 import { AppError } from "../../utils/app-error.js";
 import { authorizePermission } from "../../middleware/auth.js";
 import { auditAction } from "../../middleware/audit.js";
 import { broadcastRoomStatus } from "../../services/room-service-events.js";
 
 const router = Router();
+
+function logRoomDebug(event, request, payload) {
+  if (!env.debugRooms) {
+    return;
+  }
+
+  console.info("[rooms]", event, {
+    roomId: request.params.id || null,
+    user: {
+      id: request.user?.id || null,
+      email: request.user?.email || null,
+      role: request.user?.role || null
+    },
+    payload
+  });
+}
 
 const roomSelect = `
   SELECT
@@ -187,6 +204,17 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
   });
 
   const data = schema.parse(request.body);
+  logRoomDebug("update-request", request, {
+    numero: data.numero,
+    status: data.status || "livre",
+    capacidade: data.capacidade,
+    andar: data.andar ?? null,
+    tipo_acomodacao_id: data.tipo_acomodacao_id,
+    tipo_quarto_id: data.tipo_quarto_id,
+    descricaoLength: data.descricao?.length || 0,
+    comodidade_ids: data.comodidade_ids
+  });
+
   const result = await query(
     `UPDATE quartos
      SET numero = $2,
@@ -217,6 +245,10 @@ router.put("/:id", authorizePermission("rooms.manage"), auditAction("update", "q
 
   await syncRoomAmenities(request.params.id, data.comodidade_ids);
   const [fullRoom] = await listRoomDetails("WHERE q.id = $1", [request.params.id]);
+  logRoomDebug("update-success", request, {
+    persistedRoomId: request.params.id,
+    status: fullRoom?.status || result.rows[0]?.status || null
+  });
 
   broadcastRoomStatus({ kind: "updated", room: fullRoom });
 

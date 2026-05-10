@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../app/auth.jsx";
 import { useCompany } from "../../app/company.jsx";
 
@@ -27,6 +27,7 @@ function getInitials(name) {
 
 export function Shell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { company } = useCompany();
   const isPosRoute = location.pathname.startsWith("/pos");
@@ -34,16 +35,17 @@ export function Shell() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.localStorage.getItem("hotel-erp-sidebar-collapsed") === "true");
   const [showBrandFallback, setShowBrandFallback] = useState(false);
   const [isRoomsMenuOpen, setIsRoomsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const roomSubmenu = [
-    { label: "Todos os quartos", path: "/rooms" },
-    { label: "Quartos ocupados", path: "/rooms/occupied" },
-    { label: "Quartos livres", path: "/rooms/available" },
-    { label: "Quartos em limpeza", path: "/rooms/cleaning" },
-    { label: "Quartos em manutencao", path: "/rooms/maintenance" },
-    { label: "Cadastro de quartos", path: "/rooms/new" },
+    { label: "Visao geral das acomodacoes", path: "/rooms" },
+    { label: "Acomodacoes ocupadas", path: "/rooms/occupied" },
+    { label: "Acomodacoes disponiveis", path: "/rooms/available" },
+    { label: "Em limpeza", path: "/rooms/cleaning" },
+    { label: "Em manutencao", path: "/rooms/maintenance" },
+    { label: "Cadastrar acomodacao", path: "/rooms/new" },
     { label: "Tipos de acomodacao", path: "/rooms/accommodation-types" },
-    { label: "Tipos de quarto", path: "/rooms/room-types" }
+    { label: "Categorias de quarto", path: "/rooms/room-types" }
   ];
 
   useEffect(() => {
@@ -66,10 +68,25 @@ export function Shell() {
     }
   }, [isRoomsRoute]);
 
+  useEffect(() => {
+    setIsUserMenuOpen(false);
+  }, [location.pathname]);
+
   const companyName = company?.trade_name || "Click7 Systems";
   const subtitle = company?.subtitle || "Hotel ERP - Operacao e fiscal";
   const brandInitials = useMemo(() => getInitials(companyName), [companyName]);
   const userInitials = useMemo(() => getInitials(user?.nome || user?.email || "ERP"), [user]);
+
+  function goToAccount(section = "") {
+    navigate(section ? `/account?section=${section}` : "/account");
+    setIsUserMenuOpen(false);
+  }
+
+  async function handleLogout() {
+    setIsUserMenuOpen(false);
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className={`shell ${isSidebarCollapsed ? "shell-sidebar-collapsed" : ""}`}>
@@ -102,15 +119,27 @@ export function Shell() {
         </div>
 
         <nav className="menu">
+          {menu.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) => (isActive ? "menu-link active" : "menu-link")}
+              title={isSidebarCollapsed ? item.label : ""}
+            >
+              <span className="menu-icon" aria-hidden="true">{item.icon}</span>
+              <span className="menu-label">{item.label}</span>
+            </NavLink>
+          ))}
+
           <div className={`menu-group ${isRoomsMenuOpen ? "open" : ""} ${isRoomsRoute ? "active" : ""}`}>
             <button
               type="button"
               className={`menu-link menu-group-trigger ${isRoomsRoute ? "active" : ""}`}
               onClick={() => setIsRoomsMenuOpen((current) => !current)}
-              title={isSidebarCollapsed ? "Quartos" : ""}
+              title={isSidebarCollapsed ? "Gestao de acomodacoes" : ""}
             >
-              <span className="menu-icon" aria-hidden="true">Q</span>
-              <span className="menu-label">Quartos</span>
+              <span className="menu-icon" aria-hidden="true">GA</span>
+              <span className="menu-label">Gestao de acomodacoes</span>
               {!isSidebarCollapsed ? <span className="menu-caret">{isRoomsMenuOpen ? "-" : "+"}</span> : null}
             </button>
 
@@ -145,18 +174,6 @@ export function Shell() {
               </div>
             ) : null}
           </div>
-
-          {menu.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) => (isActive ? "menu-link active" : "menu-link")}
-              title={isSidebarCollapsed ? item.label : ""}
-            >
-              <span className="menu-icon" aria-hidden="true">{item.icon}</span>
-              <span className="menu-label">{item.label}</span>
-            </NavLink>
-          ))}
         </nav>
       </aside>
 
@@ -177,16 +194,35 @@ export function Shell() {
             </div>
           </div>
           <div className="topbar-card">
-            <div className="topbar-user">
-              <span className="user-avatar">{userInitials}</span>
-              <div>
-                <span>Usuario logado</span>
-                <strong>{user?.nome || user?.email || "Administrador"}</strong>
-              </div>
+            <div className="user-menu-shell">
+              <button
+                type="button"
+                className="user-menu-trigger"
+                onClick={() => setIsUserMenuOpen((current) => !current)}
+              >
+                <div className="topbar-user">
+                  <span className="user-avatar">{userInitials}</span>
+                  <div>
+                    <span>Usuario logado</span>
+                    <strong>{user?.nome || user?.email || "Administrador"}</strong>
+                  </div>
+                </div>
+              </button>
+
+              {isUserMenuOpen ? (
+                <div className="user-menu-dropdown">
+                  <button type="button" className="user-menu-item" onClick={() => goToAccount("profile")}>
+                    Minha conta
+                  </button>
+                  <button type="button" className="user-menu-item" onClick={() => goToAccount("password")}>
+                    Alterar senha
+                  </button>
+                  <button type="button" className="user-menu-item danger" onClick={handleLogout}>
+                    Logout
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <button type="button" className="ghost-button" onClick={logout}>
-              Logout
-            </button>
           </div>
         </header>
 

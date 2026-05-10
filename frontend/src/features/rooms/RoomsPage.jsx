@@ -59,10 +59,26 @@ function getRouteFilter(statusFilter) {
   return routeDefaults[statusFilter || "all"] || "all";
 }
 
+function formatRoomApiError(error, fallbackMessage) {
+  if (error?.status === 403) {
+    return "Usuario sem permissao para alterar acomodacoes.";
+  }
+
+  if (error?.status === 400 && Array.isArray(error?.details) && error.details.length) {
+    const firstIssue = error.details[0];
+    const fieldName = Array.isArray(firstIssue?.path) ? firstIssue.path.join(".") : "";
+    return fieldName
+      ? `Revise o campo ${fieldName}: ${firstIssue.message || "valor invalido"}.`
+      : firstIssue.message || fallbackMessage;
+  }
+
+  return error?.message || fallbackMessage;
+}
+
 export function RoomsPage({
   statusFilter = "all",
-  pageTitle = "Todos os quartos",
-  pageDescription = "Gestao operacional e cadastro de quartos.",
+  pageTitle = "Visao geral das acomodacoes",
+  pageDescription = "Gestao operacional das acomodacoes, status e cadastro.",
   autoOpenCreate = false
 }) {
   const navigate = useNavigate();
@@ -248,7 +264,7 @@ export function RoomsPage({
 
       closeModal(true);
     } catch (error) {
-      setFormError(error.message || "Nao foi possivel salvar o quarto.");
+      setFormError(formatRoomApiError(error, "Nao foi possivel salvar a acomodacao."));
     } finally {
       setIsSubmitting(false);
     }
@@ -266,7 +282,7 @@ export function RoomsPage({
       setRooms((current) => current.filter((item) => item.id !== room.id));
       setFeedback({ type: "success", message: `Quarto ${room.numero} removido com sucesso.` });
     } catch (error) {
-      setFeedback({ type: "error", message: error.message || "Nao foi possivel excluir o quarto." });
+      setFeedback({ type: "error", message: formatRoomApiError(error, "Nao foi possivel excluir a acomodacao.") });
     } finally {
       setDeletingRoomId(null);
     }
@@ -278,7 +294,7 @@ export function RoomsPage({
       setRooms((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setFeedback({ type: "success", message: `Quarto ${updated.numero} atualizado para ${statusLabels[status] || status}.` });
     } catch (error) {
-      setFeedback({ type: "error", message: error.message || "Nao foi possivel atualizar o status do quarto." });
+      setFeedback({ type: "error", message: formatRoomApiError(error, "Nao foi possivel atualizar o status da acomodacao.") });
     }
   }
 

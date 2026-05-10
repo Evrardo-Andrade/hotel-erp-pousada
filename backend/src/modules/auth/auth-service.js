@@ -110,6 +110,33 @@ export class AuthService {
     return normalizeUserRow(result.rows[0]);
   }
 
+  async updateProfile(userId, payload) {
+    const user = await this.findUserById(userId);
+
+    if (!user || !user.ativo) {
+      throw new AppError("Usuario nao encontrado.", 404);
+    }
+
+    const normalizedEmail = payload.email.toLowerCase();
+    const existing = await this.findUserByEmail(normalizedEmail);
+
+    if (existing && existing.id !== userId) {
+      throw new AppError("Ja existe um usuario com este e-mail.", 409);
+    }
+
+    const result = await query(
+      `UPDATE usuarios
+       SET nome = $2,
+           email = $3,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, nome, email, senha_hash, papel, ativo, created_at, updated_at`,
+      [userId, payload.nome, normalizedEmail]
+    );
+
+    return normalizeUserRow(result.rows[0]);
+  }
+
   async changePassword(userId, currentPassword, newPassword) {
     const user = await this.findUserById(userId);
 

@@ -7,6 +7,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   appUrl: process.env.APP_URL || "http://localhost:5173",
   jwtSecret: process.env.JWT_SECRET || "development-secret",
+  debugRooms: process.env.DEBUG_ROOMS === "true",
   fiscalEnv: process.env.FISCAL_ENV || "homologacao",
   sefazUf: process.env.SEFAZ_UF || "SP",
   certPassword: process.env.CERT_PASSWORD || "",

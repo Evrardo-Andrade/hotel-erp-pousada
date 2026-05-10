@@ -20,7 +20,10 @@ export function authenticate(request, response, next) {
   const [scheme, token] = authHeader.split(" ");
 
   if (scheme !== "Bearer" || !token) {
-    return response.status(401).json({ message: "Token nao informado." });
+    return response.status(401).json({
+      message: "Token nao informado.",
+      code: "AUTH_TOKEN_MISSING"
+    });
   }
 
   try {
@@ -33,7 +36,17 @@ export function authenticate(request, response, next) {
     };
     return next();
   } catch (error) {
-    return response.status(401).json({ message: "Token invalido." });
+    if (error?.name === "TokenExpiredError") {
+      return response.status(401).json({
+        message: "Sessao expirada. Faca login novamente.",
+        code: "AUTH_TOKEN_EXPIRED"
+      });
+    }
+
+    return response.status(401).json({
+      message: "Token invalido.",
+      code: "AUTH_TOKEN_INVALID"
+    });
   }
 }
 

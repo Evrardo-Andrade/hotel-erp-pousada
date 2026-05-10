@@ -10,9 +10,9 @@ import { RoomClassificationPage } from "./RoomClassificationPage.jsx";
 export function RoomTypesPage() {
   return (
     <RoomClassificationPage
-      title="Tipos de quarto"
-      description="Gerencie padroes de quarto, categorias e disponibilidade para novos cadastros."
-      entityLabel="Tipo de quarto"
+      title="Categorias de quarto"
+      description="Gerencie categorias comerciais e operacionais usadas no cadastro das acomodacoes."
+      entityLabel="Categoria de quarto"
       fetchItems={fetchRoomTypes}
       createItem={createRoomType}
       updateItem={updateRoomType}

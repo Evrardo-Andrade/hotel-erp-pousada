@@ -901,8 +901,13 @@ async function parseResponse(response) {
   if (!response.ok) {
     const error = new Error(data?.message || "Falha na requisicao.");
     error.status = response.status;
+    error.code = data?.code || null;
+    error.details = data?.details || null;
 
-    if (response.status === 401) {
+    if (
+      response.status === 401 &&
+      ["AUTH_TOKEN_MISSING", "AUTH_TOKEN_INVALID", "AUTH_TOKEN_EXPIRED"].includes(data?.code)
+    ) {
       clearStoredAuthSession();
       window.dispatchEvent(new CustomEvent("hotel-erp-auth-expired"));
     }
@@ -1396,6 +1401,7 @@ function filterAvailableRooms(payload) {
 
 async function request(path, options = {}) {
   const [routePath] = path.split("?");
+  const method = String(options.method || "GET").toUpperCase();
   const config = {
     ...options,
     headers: getHeaders(options.headers)
@@ -1415,6 +1421,20 @@ async function request(path, options = {}) {
   } catch (error) {
     if (error?.status === 401 || error?.status === 403) {
       throw error;
+    }
+
+    const isRoomWrite =
+      method !== "GET" &&
+      (
+        routePath === "/rooms" ||
+        routePath.startsWith("/rooms/") ||
+        routePath.startsWith("/room-amenities") ||
+        routePath.startsWith("/room-accommodation-types") ||
+        routePath.startsWith("/room-types")
+      );
+
+    if (isRoomWrite) {
+      throw new Error("Nao foi possivel salvar a acomodacao no servidor. Verifique a conexao com a API e tente novamente.");
     }
 
     if (
@@ -1485,6 +1505,39 @@ async function fallbackRequest(path, options) {
       error.status = 404;
       throw error;
     }
+
+    return {
+      user: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        ativo: user.ativo,
+        permissions: user.permissions
+      }
+    };
+  }
+
+  if (routePath === "/auth/profile" && method === "PUT") {
+    const payload = JSON.parse(options.body);
+    const session = getStoredAuthSession();
+    const user = fallbackAuthUsers.find((item) => item.email.toLowerCase() === String(session?.user?.email || "").toLowerCase());
+
+    if (!user) {
+      const error = new Error("Usuario nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    const duplicate = fallbackAuthUsers.find((item) => item.email.toLowerCase() === String(payload.email || "").toLowerCase() && item.id !== user.id);
+    if (duplicate) {
+      const error = new Error("Ja existe um usuario com este e-mail.");
+      error.status = 409;
+      throw error;
+    }
+
+    user.nome = payload.nome;
+    user.email = String(payload.email || "").toLowerCase();
 
     return {
       user: {
@@ -2934,6 +2987,14 @@ export async function logoutRequest() {
 
 export async function fetchCurrentUser() {
   return apiGet("/auth/me");
+}
+
+export async function updateCurrentUserProfile(payload) {
+  return request("/auth/profile", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" }
+  });
 }
 
 export async function registerUser(payload) {

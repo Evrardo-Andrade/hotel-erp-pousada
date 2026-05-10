@@ -26,6 +26,17 @@ router.get("/me", authMiddleware, async (request, response) => {
   return response.json({ user });
 });
 
+router.put("/profile", authMiddleware, async (request, response) => {
+  const schema = z.object({
+    nome: z.string().trim().min(2).max(150),
+    email: z.string().email()
+  });
+
+  const data = schema.parse(request.body);
+  const user = await authService.updateProfile(request.user.id, data);
+  return response.json({ user });
+});
+
 router.post("/register", authMiddleware, requireRole(["admin"]), async (request, response) => {
   const schema = z.object({
     nome: z.string().trim().min(2).max(150),

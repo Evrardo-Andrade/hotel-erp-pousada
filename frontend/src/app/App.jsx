@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute.jsx";
 import { Shell } from "../components/layout/Shell.jsx";
 import { LoginPage } from "../features/auth/LoginPage.jsx";
+import { AccountPage } from "../features/account/AccountPage.jsx";
 import { DashboardPage } from "../features/dashboard/DashboardPage.jsx";
 import { RoomsPage } from "../features/rooms/RoomsPage.jsx";
 import { RoomAccommodationTypesPage } from "../features/rooms/RoomAccommodationTypesPage.jsx";
@@ -23,12 +24,13 @@ export function App() {
       <Route path="/" element={<ProtectedRoute><Shell /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="account" element={<AccountPage />} />
         <Route path="rooms" element={<RoomsPage />} />
-        <Route path="rooms/occupied" element={<RoomsPage statusFilter="ocupado" pageTitle="Quartos ocupados" pageDescription="Quartos atualmente em uso pela hospedagem." />} />
-        <Route path="rooms/available" element={<RoomsPage statusFilter="livre" pageTitle="Quartos livres" pageDescription="Quartos prontos para reserva e check-in." />} />
-        <Route path="rooms/cleaning" element={<RoomsPage statusFilter="limpeza" pageTitle="Quartos em limpeza" pageDescription="Acompanhamento da fila de governanca." />} />
-        <Route path="rooms/maintenance" element={<RoomsPage statusFilter="manutencao" pageTitle="Quartos em manutencao" pageDescription="Unidades indisponiveis por manutencao ou bloqueio tecnico." />} />
-        <Route path="rooms/new" element={<RoomsPage autoOpenCreate pageTitle="Cadastro de quartos" pageDescription="Novo cadastro com classificacoes dinamicas e comodidades." />} />
+        <Route path="rooms/occupied" element={<RoomsPage statusFilter="ocupado" pageTitle="Acomodacoes ocupadas" pageDescription="Acompanhe as acomodacoes atualmente em uso pela hospedagem." />} />
+        <Route path="rooms/available" element={<RoomsPage statusFilter="livre" pageTitle="Acomodacoes disponiveis" pageDescription="Acomodacoes prontas para reserva, venda e check-in." />} />
+        <Route path="rooms/cleaning" element={<RoomsPage statusFilter="limpeza" pageTitle="Em limpeza" pageDescription="Acompanhamento operacional da fila de limpeza e liberacao." />} />
+        <Route path="rooms/maintenance" element={<RoomsPage statusFilter="manutencao" pageTitle="Em manutencao" pageDescription="Acomodacoes indisponiveis por manutencao ou bloqueio tecnico." />} />
+        <Route path="rooms/new" element={<RoomsPage autoOpenCreate pageTitle="Cadastrar acomodacao" pageDescription="Novo cadastro com classificacoes dinamicas e comodidades." />} />
         <Route path="rooms/accommodation-types" element={<RoomAccommodationTypesPage />} />
         <Route path="rooms/room-types" element={<RoomTypesPage />} />
         <Route path="reservations" element={<ReservationsPage />} />

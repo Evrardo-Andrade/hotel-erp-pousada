@@ -505,6 +505,52 @@ button {
   gap: 12px;
 }
 
+.user-menu-shell {
+  position: relative;
+}
+
+.user-menu-trigger {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  min-width: 220px;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.user-menu-item {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.user-menu-item:hover {
+  background: var(--color-primary-soft);
+}
+
+.user-menu-item.danger {
+  color: var(--color-danger);
+}
+
 .user-avatar {
   width: 42px;
   min-width: 42px;
@@ -563,6 +609,39 @@ button {
 
 .auth-submit {
   width: 100%;
+}
+
+.account-page-grid {
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.account-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.user-avatar.large {
+  width: 64px;
+  min-width: 64px;
+  height: 64px;
+  font-size: 1.2rem;
+}
+
+.account-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.is-muted-panel {
+  opacity: 0.76;
 }
 
 .page-grid {

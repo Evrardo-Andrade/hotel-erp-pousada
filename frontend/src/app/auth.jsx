@@ -7,7 +7,8 @@ import {
   loginRequest,
   logoutRequest,
   registerUser,
-  setStoredAuthSession
+  setStoredAuthSession,
+  updateCurrentUserProfile
 } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -88,6 +89,23 @@ export function AuthProvider({ children }) {
     return currentUser;
   }
 
+  async function updateProfile(payload) {
+    const result = await updateCurrentUserProfile(payload);
+    const nextUser = result?.user || null;
+    const session = getStoredAuthSession();
+
+    if (session?.token && nextUser) {
+      setStoredAuthSession({ token: session.token, user: nextUser }, null);
+    }
+
+    setUser(nextUser);
+    return nextUser;
+  }
+
+  async function changeOwnPassword(payload) {
+    return changePassword(payload);
+  }
+
   const value = useMemo(() => ({
     user,
     token,
@@ -95,9 +113,11 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(token && user),
     login,
     logout,
+    updateProfile,
+    changeOwnPassword,
     getCurrentUser: refreshCurrentUser,
     registerUser,
-    changePassword
+    changePassword: changeOwnPassword
   }), [user, token, isLoadingAuth]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
