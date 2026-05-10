@@ -20,18 +20,22 @@ const allowedOrigins = new Set([
   env.appUrl
 ].filter(Boolean));
 
-app.use(helmet());
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("CORS origin not allowed"));
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
     }
-  })
-);
+
+    return callback(new Error("CORS origin not allowed"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin"]
+};
+
+app.use(helmet());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(attachRequestContext);
 app.use(basicRateLimit());
 app.use("/uploads", express.static(path.resolve(__dirname, "..", "..", "uploads")));
